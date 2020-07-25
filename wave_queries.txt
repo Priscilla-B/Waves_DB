@@ -37,17 +37,20 @@ currency text NOT NULL,ledger_location text NOT NULL,
 when_created timestamp without time zone NOT NULL);
 
 
+SELECT * FROM transfers;
 -- how many users does wave have?
 SELECT COUNT(u_id) FROM users;
 
-
 --how many transfers have been sent in the currency CFA?
-SELECT COUNT(transfer_id) FROM transfers
+SELECT COUNT(transfer_id) AS transfers_in_cfa 
+FROM transfers 
 WHERE send_amount_currency = 'CFA';
 
 --how many different users have sent a transfer in CFA?
 SELECT COUNT(DISTINCT u_id) FROM transfers
 WHERE send_amount_currency = 'CFA';
+
+SELECT * FROM agent_transactions;
 
 --how many agents did we have in the months of 2018 broken down by months?
 SELECT TO_CHAR(when_created, 'Month') AS month, COUNT(atx_id) 
@@ -55,14 +58,15 @@ FROM agent_transactions
 WHERE when_created BETWEEN '01-01-2018' AND '31-12-2018'
 GROUP BY month;
 
+
 --over the course of last week, how many Wave agents were "net depositors" vs. "net withdrawers?"
 SELECT COUNT(atx_id) AS net_withdrawers FROM agent_transactions 
---last week
 WHERE amount>0
 UNION ALL
 SELECT COUNT(atx_id) AS net_depositors FROM agent_transactions 
 WHERE amount<0;
 
+SELECT * FROM agents;
 -- building atx volume city summary table
 SELECT COUNT(atx.atx_id) AS atx_volume, a.city 
 FROM agent_transactions AS atx
@@ -79,11 +83,38 @@ LEFT JOIN agents AS a ON atx.agent_id = a.agent_id
 GROUP BY a.country, a.city;
 
 --building send volume by country and kind table
-SELECT COUNT(transfers.send_amount_scalar), 
-transfers.kind AS transfer_kind, wallets.ledger_location AS country
+SELECT wallets.ledger_location AS country,
+transfers.kind AS transfer_kind,
+COUNT(transfers.send_amount_scalar) AS send_volume  
 FROM transfers
 --WHERE last week
 LEFT JOIN wallets ON transfers.source_wallet_id = wallets.wallet_id
 GROUP BY country, transfer_kind;
+
+--adding columns for transaction count and number of unique senders
+SELECT COUNT(DISTINCT transfers.u_id) AS unique_senders,
+wallets.ledger_location AS country,
+transfers.kind AS transfer_kind,
+COUNT(transfers.send_amount_scalar) AS send_volume,
+COUNT(transfers.transfer_id) AS transaction_count
+FROM transfers
+--WHERE last week
+LEFT JOIN wallets ON transfers.source_wallet_id = wallets.wallet_id
+GROUP BY country, transfer_kind;
+
+SELECT * FROM transfers;
+
+-- wallets that have sent more than CFA 10,000,000 in transfers in the last month
+
+--I'm assuming that a user can make multiple transfers in a month.
+--as a result, the source_wallet_id values could be repeated within a month. 
+--This is the reason why I decided to sum the send_scalar_amount values
+SELECT source_wallet_id, 
+SUM(send_amount_scalar) AS total_amount_sent
+FROM transfers
+WHERE send_amount_currency = 'CFA' 
+AND when_created BETWEEN (NOW() - INTERVAL '1 month') AND NOW()
+GROUP BY source_wallet_id
+HAVING SUM(send_amount_scalar)>10000000
 
 
