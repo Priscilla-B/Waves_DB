@@ -1,0 +1,89 @@
+--creating database
+CREATE DATABASE wave
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    CONNECTION LIMIT = -1;
+
+-- creating tables
+CREATE TABLE users (u_id integer PRIMARY KEY,
+name text NOT NULL,mobile text NOT NULL,
+wallet_id integer NOT NULL,
+when_created timestamp without time zone NOT NULL);
+
+CREATE TABLE transfers (transfer_id integer PRIMARY KEY,
+u_id integer NOT NULL,source_wallet_id integer NOT NULL,
+dest_wallet_id integer NOT NULL,
+send_amount_currency text NOT NULL,
+send_amount_scalar numeric NOT NULL,
+receive_amount_currency text NOT NULL,
+receive_amount_scalar numeric NOT NULL,
+kind text NOT NULL,dest_mobile text,
+dest_merchant_id integer,
+when_created timestamp without time zone NOT NULL);
+
+CREATE TABLE agents (agent_id integer PRIMARY KEY,
+name text,country text NOT NULL,
+region text,city text,
+subcity text,when_created timestamp without time zone NOT NULL);
+
+CREATE TABLE agent_transactions (atx_id integer PRIMARY KEY,
+u_id integer NOT NULL,agent_id integer NOT NULL,
+amount numeric NOT NULL,fee_amount_scalar numeric NOT NULL,
+when_created timestamp without time zone NOT NULL);
+ 
+CREATE TABLE wallets (wallet_id integer PRIMARY KEY,
+currency text NOT NULL,ledger_location text NOT NULL,
+when_created timestamp without time zone NOT NULL);
+
+
+-- how many users does wave have?
+SELECT COUNT(u_id) FROM users;
+
+
+--how many transfers have been sent in the currency CFA?
+SELECT COUNT(transfer_id) FROM transfers
+WHERE send_amount_currency = 'CFA';
+
+--how many different users have sent a transfer in CFA?
+SELECT COUNT(DISTINCT u_id) FROM transfers
+WHERE send_amount_currency = 'CFA';
+
+--how many agents did we have in the months of 2018 broken down by months?
+SELECT TO_CHAR(when_created, 'Month') AS month, COUNT(atx_id) 
+FROM agent_transactions
+WHERE when_created BETWEEN '01-01-2018' AND '31-12-2018'
+GROUP BY month;
+
+--over the course of last week, how many Wave agents were "net depositors" vs. "net withdrawers?"
+SELECT COUNT(atx_id) AS net_withdrawers FROM agent_transactions 
+--last week
+WHERE amount>0
+UNION ALL
+SELECT COUNT(atx_id) AS net_depositors FROM agent_transactions 
+WHERE amount<0;
+
+-- building atx volume city summary table
+SELECT COUNT(atx.atx_id) AS atx_volume, a.city 
+FROM agent_transactions AS atx
+--WHERE when_created >= NOW()-7 AND when_created < NOW()
+LEFT JOIN agents AS a ON atx.agent_id = a.agent_id
+GROUP BY a.city;
+
+
+--separating atx volume by country and city
+SELECT a.country, a.city, COUNT(atx.atx_id) AS atx_volume
+FROM agent_transactions AS atx
+--WHERE when_created >= NOW()-7 AND when_created < NOW()
+LEFT JOIN agents AS a ON atx.agent_id = a.agent_id
+GROUP BY a.country, a.city;
+
+--building send volume by country and kind table
+SELECT COUNT(transfers.send_amount_scalar), 
+transfers.kind AS transfer_kind, wallets.ledger_location AS country
+FROM transfers
+--WHERE last week
+LEFT JOIN wallets ON transfers.source_wallet_id = wallets.wallet_id
+GROUP BY country, transfer_kind;
+
+
